@@ -2,34 +2,40 @@
 
 This repository implements HyperSRCNN, a hypernetwork-based approach to single image super-resolution that leverages a single meta-network to handle multiple scale factors through parameter generation.
 
-## 📚 Overview
+## Overview
 
 HyperSRCNN addresses a key limitation in traditional super-resolution models: the need to train separate models for different upscaling factors. Instead, HyperSRCNN uses a hypernetwork architecture that dynamically generates weights for a target SRCNN model conditioned on the desired scale factor, enabling a single model to handle multiple scaling operations efficiently.
 
-![HyperSRCNN Architecture](https://via.placeholder.com/800x400?text=HyperSRCNN+Architecture)
-
-## 🔑 Key Features
+## Key Features
 
 - **Multi-scale capability**: A single model handles multiple scale factors (2×, 4×, 8×, 16×)
 - **Parameter efficiency**: Uses hypernetworks to generate appropriate weights for each scale
 - **Improved performance**: Achieves comparable or better PSNR scores than individual SRCNN models
 - **Flexible architecture**: Can easily be extended to additional scale factors
 
-## 🧩 Repository Structure
+## Repository Structure
 
 ```
 ├── SRCNN/
-│   ├── SRCNN_utils.py           # Core utilities for the SRCNN model
-│   ├── SRCNN_train.py           # Training script for individual SRCNN models
-│   └── SRCNN_train_multi_scaling.py  # Script to train multiple scale factors
+│   ├── prod_code/
+│   │   ├── SRCNN_utils.py             # Model definition, dataset, and training utilities
+│   │   ├── SRCNN_train.py             # Training script (loops over configured scale factors)
+│   │   ├── SRCNN_train_SINGLEMODEL.py # Training script for a single scale factor
+│   │   └── SRCNN_high_scale_train.py  # Training script for larger scale factors (32x, 64x)
+│   ├── run_scripts/                   # SLURM batch scripts for cluster training
+│   └── outputs/                       # Training run logs, checkpoints, and results (generated)
 ├── HyperSRCNN/
-│   ├── HyperSRCNN_utils.py      # Core utilities for the HyperSRCNN model
-│   └── HyperSRCNN_train.py      # Training script for the hypernetwork
-├── inference_examples/          # Example images and inference results
-└── models/                      # Pre-trained model weights
+│   ├── prod_code/
+│   │   ├── HyperSRCNN_utils.py        # HyperSRCNN model, training loop, and inference utilities
+│   │   ├── HyperSRCNN_train.py        # Training script for the hypernetwork
+│   │   └── HyperSRCNN_high_scale_train.py  # Training script for larger scale factors
+│   ├── run_scripts/                   # SLURM batch scripts for cluster training
+│   └── outputs/                       # Training run logs, checkpoints, and results (generated)
+├── data/                              # Training/validation datasets (DIV2K, DF2K, Set5, Set14, etc.)
+└── requirements.txt
 ```
 
-## 🔬 Models
+## Models
 
 ### SRCNN
 The Super-Resolution Convolutional Neural Network (SRCNN) is a classic deep learning approach to super-resolution. Our implementation follows the architecture from the original paper with three convolutional layers:
@@ -46,57 +52,71 @@ HyperSRCNN consists of two main components:
    - Has the same architecture as standard SRCNN but no fixed weights
    - Adapts to different scale factors by using HNet-generated weights
 
-## 🚀 Getting Started
+## Getting Started
 
 ### Prerequisites
 
 ```bash
 # Clone the repository
-git clone https://github.com/username/hypersrcnn.git
-cd hypersrcnn
+git clone https://github.com/davidkurtenb/HyperSuperResolution.git
+cd HyperSuperResolution
+
+# Create and activate an environment (conda example)
+conda create -n hyperisr_env python=3.11
+conda activate hyperisr_env
 
 # Install dependencies
-pip install torch torchvision tqdm numpy matplotlib pillow pandas
+pip install -r requirements.txt
 ```
 
 ### Training
 
-#### Training individual SRCNN models:
+Scale factors and other run parameters are configured directly in each training script (e.g. `scale_factor_lst` in `SRCNN_train.py`) rather than via CLI flags.
+
+#### Training SRCNN models:
 
 ```bash
-# Train a single SRCNN model for a specific scale factor
-python SRCNN/SRCNN_train.py --scale_factor 2
+# Train SRCNN models across the configured scale factors
+python SRCNN/prod_code/SRCNN_train.py
 
-# Train multiple SRCNN models for different scale factors
-python SRCNN/SRCNN_train_multi_scaling.py
+# Train a single SRCNN model
+python SRCNN/prod_code/SRCNN_train_SINGLEMODEL.py
+
+# Train on larger scale factors (32x, 64x)
+python SRCNN/prod_code/SRCNN_high_scale_train.py
 ```
 
 #### Training the HyperSRCNN model:
 
 ```bash
 # Train the hypernetwork to handle multiple scale factors
-python HyperSRCNN/HyperSRCNN_train.py
+python HyperSRCNN/prod_code/HyperSRCNN_train.py
+
+# Train on larger scale factors
+python HyperSRCNN/prod_code/HyperSRCNN_high_scale_train.py
 ```
+
+Each `<model>/run_scripts/` directory also contains SLURM batch scripts for launching training on a cluster.
 
 ### Inference
 
-To perform super-resolution on images using a trained model:
+`HyperSRCNN_utils.py` provides `comprehensive_inference` and `batch_comprehensive_inference` for running a trained hypernetwork (and, for comparison, individually trained SRCNN models) on images:
 
 ```python
 from HyperSRCNN_utils import comprehensive_inference
 
-# Path to the hypernetwork model
-hyper_checkpoint_path = 'models/hypernetwork_checkpoint_best.pth'
+# Path to the hypernetwork checkpoint
+hyper_checkpoint_path = 'HyperSRCNN/outputs/.../hypernetwork_checkpoint_best.pth'
 
-# Dictionary mapping scale factors to SRCNN model paths (for comparison)
+# Dictionary mapping scale factors to SRCNN model checkpoints (for comparison)
 srcnn_model_paths = {
-    2: 'models/srcnn_sf2_best.pth',
-    4: 'models/srcnn_sf4_best.pth',
-    8: 'models/srcnn_sf8_best.pth',
-    16: 'models/srcnn_sf16_best.pth'
+    2: 'SRCNN/outputs/.../srcnn_sf2_best.pth',
+    4: 'SRCNN/outputs/.../srcnn_sf4_best.pth',
+    8: 'SRCNN/outputs/.../srcnn_sf8_best.pth',
+    16: 'SRCNN/outputs/.../srcnn_sf16_best.pth'
 }
 
-# Perform inference
+# Perform inference on a single image
 results = comprehensive_inference(
     hyper_checkpoint_path=hyper_checkpoint_path,
     srcnn_model_paths=srcnn_model_paths,
@@ -106,7 +126,7 @@ results = comprehensive_inference(
 )
 ```
 
-To process multiple images:
+To process a directory of images:
 
 ```python
 from HyperSRCNN_utils import batch_comprehensive_inference
@@ -120,7 +140,7 @@ batch_comprehensive_inference(
 )
 ```
 
-## 📊 Results
+## Results
 
 HyperSRCNN demonstrates competitive performance compared to individually trained SRCNN models:
 
@@ -131,14 +151,8 @@ HyperSRCNN demonstrates competitive performance compared to individually trained
 | 8×           | 22.63 dB       | 23.75 dB     | 23.81 dB          |
 | 16×          | 20.14 dB       | 20.98 dB     | 21.05 dB          |
 
-## 🔍 Related Work
 
-This repository also includes implementations of other architectures for comparison:
-
-- **DRCT (Dense Residual Contextual Transformer)**: A transformer-based model for super-resolution
-- **RealDRCTGAN/RealDRCTMSE**: Models targeting real-world degradations with GAN or MSE losses
-
-## 📚 Citation
+## Citation
 
 If you find this code useful for your research, please consider citing:
 
@@ -151,6 +165,6 @@ If you find this code useful for your research, please consider citing:
 }
 ```
 
-## 🔓 License
+## License
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+This project is licensed under the MIT License.

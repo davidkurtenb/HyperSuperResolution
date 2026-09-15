@@ -33,6 +33,7 @@ class HyperSRCNN(nn.Module):
         
         #conditional embedding for different scale factors (2, 4, 8, 16)
         self.scale_embeddings = nn.Parameter(torch.randn(num_models, 32))
+        print(f"SCALE EMBEDDINGS:\n\t {self.scale_embeddings}")
         
         #hnet layers
         self.hidden1 = nn.Linear(32, 128)
@@ -67,8 +68,6 @@ def train_hyper_srcnn(hnet, mnet, train_datasets, val_datasets, scale_factors, r
     epoch_start_time = datetime.datetime.now()
     training_start_time = epoch_start_time
     
-
-
     os.makedirs(results_dir, exist_ok=True)
     os.makedirs(os.path.join(results_dir, 'checkpoints'), exist_ok=True)
     os.makedirs(os.path.join(results_dir, 'plots'), exist_ok=True)
@@ -340,7 +339,7 @@ def comprehensive_inference(hyper_checkpoint_path, srcnn_model_paths, image_path
     mnet = SRCNNNoWeights().to(device)
     hnet = HyperSRCNN(num_models=4).to(device)
     
-    hyper_checkpoint = torch.load(hyper_checkpoint_path, map_location=device)
+    hyper_checkpoint = torch.load(hyper_checkpoint_path, map_location=device, weights_only=False)
     hnet.load_state_dict(hyper_checkpoint['hnet_state_dict'])
     
     hnet.eval()
@@ -356,7 +355,7 @@ def comprehensive_inference(hyper_checkpoint_path, srcnn_model_paths, image_path
     srcnn_model_path = srcnn_model_paths.get(scale_factor)
     
     if srcnn_model_path and os.path.exists(srcnn_model_path):
-        srcnn_checkpoint = torch.load(srcnn_model_path, map_location=device)
+        srcnn_checkpoint = torch.load(srcnn_model_path, map_location=device, weights_only=False)
         srcnn_model.load_state_dict(srcnn_checkpoint['model_state_dict'])
         srcnn_model.eval()
         #print(f"Loaded SRCNN model for {scale_factor}x from {srcnn_model_path}")
@@ -607,7 +606,7 @@ def batch_comprehensive_inference(hyper_checkpoint_path, srcnn_model_paths, imag
     
     labels = ['Bicubic', 'SRCNN','Hyper-SRCNN']
     
-    plt.boxplot(data_to_plot, labels=labels, patch_artist=True, 
+    plt.boxplot(data_to_plot, tick_labels=labels, patch_artist=True,
                 boxprops=dict(facecolor='lightblue'))
     plt.title(f'PSNR Distribution at {scale_factor}x Scale')
     plt.ylabel('PSNR (dB)')
